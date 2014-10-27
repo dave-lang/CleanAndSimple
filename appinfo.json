@@ -1,0 +1,31 @@
+{
+    "appKeys": {},
+    "capabilities": [
+        "configurable"
+    ],
+    "companyName": "davoaust88@gmail.com",
+    "longName": "Clean and simple",
+    "projectType": "native",
+    "resources": {
+        "media": [
+            {
+                "file": "images/default.png",
+                "menuIcon": true,
+                "name": "MENU_ICO",
+                "type": "png"
+            },
+            {
+                "file": "images/system-icon-bluetooth.png",
+                "name": "BLUETOOTH_ICON",
+                "type": "png"
+            }
+        ]
+    },
+    "shortName": "Clean and simple",
+    "uuid": "16ace837-1be5-4914-8126-9acbd3d5cff4",
+    "versionCode": 1,
+    "versionLabel": "1.0",
+    "watchapp": {
+        "watchface": true
+    }
+}
