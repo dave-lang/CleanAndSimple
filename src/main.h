@@ -1,6 +1,11 @@
 #pragma once
 
-#define DEBUG true
+// Includes/excludes debugging code, mostly logging
+#define DEBUG false
+
+// App message & storage keys
+#define KEY_VIBRATE 0
+  
 // General layout figures
 #define MAX_WIDTH 144
   

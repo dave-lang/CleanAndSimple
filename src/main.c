@@ -1,6 +1,10 @@
 #include <pebble.h>
 #include <math.h>
 #include "main.h"
+#include "storage.h"
+#include "drawing.h"
+
+struct PersistentStorage *store;
 
 Window *s_main_window;
 TextLayer *s_time_layer;
@@ -17,28 +21,44 @@ char dateBuffer[DATE_BUFFER_SIZE];
 char blueBuffer[14];
 int batteryPerc = 0;
 bool bluetoothConn;
-// State variables
-bool vibr_on = false;
+// State
+bool setupFinished = false;
 
-// Thanks to https://github.com/Jnmattern/Minimalist/blob/master/src/bitmap.h for bmp drawing
-static inline void bmpPutPixel(GBitmap *bmp, int x, int y, GColor c) {
-  if (x >= bmp->bounds.size.w || y >= bmp->bounds.size.h || x < 0 || y < 0) return;
-  int byteoffset = y*bmp->row_size_bytes + x/8;
-  ((uint8_t *)bmp->addr)[byteoffset] &= ~(1<<(x%8));
-  if (c == GColorWhite) ((uint8_t *)bmp->addr)[byteoffset] |= (1<<(x%8));
+void message_received_handler(DictionaryIterator *received, void *context) {
+  #if DEBUG
+    APP_LOG(APP_LOG_LEVEL_INFO, "App Message Received!");
+  #endif
+    
+  // Get the first pair
+  Tuple *t = dict_read_first(received);
+
+  // Process all pairs present
+  while(t != NULL) {
+    // Process this pair's key
+    switch (t->key) {
+      case KEY_VIBRATE:
+      APP_LOG(APP_LOG_LEVEL_WARNING, "key %lu", t->key);
+      
+        #if DEBUG
+          APP_LOG(APP_LOG_LEVEL_INFO, "KEY_VIBRATE received with value %d", (int)t->value->int32);
+        #endif
+          
+        // Set vibrate setting
+        store.vibrate = ((int)t->value->int32 == 1);
+        update_persist(store);
+      
+        break;
+      default:
+        APP_LOG(APP_LOG_LEVEL_WARNING, "Unrecognised key %lu", t->key);
+    }
+
+    // Get next pair, if any
+    t = dict_read_next(received);
+  }
 }
 
-static inline void bmpRect(GBitmap *bmp, GRect rect, GColor c, bool fill) {
-  int i, j;
-  int xe = rect.origin.x + rect.size.w;
-  int ye = rect.origin.y + rect.size.h;
-  for (j=rect.origin.y ; j<ye; j++) {
-    for (i=rect.origin.x ; i<xe; i++) {
-      if (fill || (!(j > rect.origin.y && j < (ye - 1)) || (i == rect.origin.x || i == (xe - 1)))) {
-        bmpPutPixel(bmp, i, j, c);
-      }
-    }
-  }
+void message_dropped_handler(AppMessageResult reason, void *context) {
+  APP_LOG(APP_LOG_LEVEL_ERROR, "App Message Dropped!");
 }
 
 void refresh_battery_layer() {
@@ -67,7 +87,7 @@ void refresh_bluetooth_layer() {
     
     bitmap_layer_set_bitmap(s_bluetooth_layer, bt_image);
     
-    if (vibr_on)
+    if (setupFinished && store.vibrate)
       vibes_long_pulse();
 
     strncpy(blueBuffer, "No connection", 14);
@@ -79,7 +99,7 @@ void refresh_bluetooth_layer() {
     strncpy(blueBuffer, "", 14);
     text_layer_set_text(s_bluetooth_text_layer, blueBuffer);
     
-    if (vibr_on)
+    if (setupFinished && store.vibrate)
       vibes_long_pulse();
   }
   
@@ -174,7 +194,9 @@ void init() {
   #if DEBUG
     APP_LOG(APP_LOG_LEVEL_INFO, "init");
   #endif
-    
+  
+  store = migrate_and_read_persist();
+  
   // Create main Window element and assign to pointer
   s_main_window = window_create();
 
@@ -203,15 +225,27 @@ void init() {
   // Update bluetooth
   bluetooth_handler(bluetooth_connection_service_peek()); 
   
-  // Enable vibrate for events
-  vibr_on = true;
+  // Configure handlers to receive settings from phone
+  app_message_register_inbox_received(message_received_handler);
+  app_message_register_inbox_dropped(message_dropped_handler);
+  app_message_open(APP_MESSAGE_INBOX_SIZE_MINIMUM, APP_MESSAGE_OUTBOX_SIZE_MINIMUM);
+  
+  // Finished all setup, used to check for vibrate
+  setupFinished = false;
 }
 
 void deinit() {
   #if DEBUG
     APP_LOG(APP_LOG_LEVEL_INFO, "deinit");
   #endif
-    
+  
+  // Unsubscribe from all services
+  tick_timer_service_unsubscribe();
+  battery_state_service_unsubscribe();
+  bluetooth_connection_service_unsubscribe();
+  app_message_deregister_callbacks();
+  
+  // Destroy the window
   window_destroy(s_main_window);
 }
 
